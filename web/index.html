@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>爱托皮利卡 · 中文拼音输入法</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>爱托皮利卡 · 中文拼音输入法</h1>
+      <div class="sub">THUOCL 词库 + n-gram 解码 · 可选 Deepseek-R1 智能联想</div>
+    </header>
+
+    <div class="card">
+      <div class="label"><span>拼音输入（可连写或空格分隔，无声调）</span><span id="modeTip">打字出候选 · 清空出联想</span></div>
+      <input id="pinyin" type="text" placeholder="例如：nihao / wo ai zhongguo / zhongguogongchandang" autocomplete="off" />
+      <div class="cands" id="cands"></div>
+    </div>
+
+    <div class="card">
+      <div class="label"><span>已上屏正文（可编辑，便于修改/复制）</span></div>
+      <textarea id="context" placeholder="选词后自动上屏到这里；也可直接手写。末尾文字用于联想与 AI 续写。"></textarea>
+      <div class="row">
+        <button class="primary" id="copyBtn">复制正文</button>
+        <button id="clearCtx">清空正文</button>
+        <button id="clearPy">清空拼音</button>
+      </div>
+      <div class="hint">快捷键：数字 1-9 选候选 · 空格/回车选首候选 · Esc 清拼音 · 拼音为空时 Backspace 删末字</div>
+    </div>
+
+    <div class="card">
+      <div class="label"><span>联想候选 <span class="tag" id="assocTag">基于上下文</span></span></div>
+      <div class="cands" id="assoc"></div>
+    </div>
+
+    <div class="card">
+      <div class="label"><span>AI 续写 / 整句建议 <span class="tag ai" id="aiTag">Deepseek-R1</span></span></div>
+      <div class="cands" id="ai"></div>
+      <div class="hint" id="aiHint">未检测到本地 Deepseek 服务（localhost:8080）。启动 llama-server 后刷新即可启用 AI 联想，未启用不影响词典输入。</div>
+    </div>
+
+    <div class="card">
+      <div class="status" id="status">加载中…</div>
+    </div>
+  </div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

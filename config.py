@@ -35,7 +35,7 @@ DICTS_DIR = os.environ.get("IME_DICTS", _resolve("githubMIT"))
 CACHE_DIR = os.environ.get("IME_CACHE", os.path.join(APP_DIR, "cache"))
 
 # 缓存结构版本：词库加载逻辑变更时 +1，强制重建缓存。
-CACHE_VERSION = 3
+CACHE_VERSION = 4
 
 # Deepseek / llama-server 本地接口（OpenAI 兼容）。未启动则自动降级为词典模式。
 DEEPSEEK_URL = os.environ.get("DEEPSEEK_URL", "http://localhost:8080/v1")
@@ -48,6 +48,14 @@ MAX_WORD_SYL = 8     # 一个词最多匹配的音节数
 LAMBDA_BI = 0.6      # bigram 语言模型权重
 WORD_BONUS = 2.0     # 成词奖励（让词优先于拆字）
 CHAR_PENALTY = 0.8   # 单字惩罚
+
+# 词库量级护栏（Google 级）：
+#   ESSAY_CAP: RIME essay 收录词条上限（按词频降序截取），0 = 全部收录（默认）。
+#   PHRASE_BUCKET_CAP: 每个拼音音节同音词上限，护栏内存/性能，不影响拼音覆盖，0 = 不限制。
+#   DECODE_CAND_CAP: 解码时每个切分位置最多考虑的候选词数（按词频优先），护栏长句解码耗时。
+ESSAY_CAP = int(os.environ.get("IME_ESSAY_CAP", "0") or 0)
+PHRASE_BUCKET_CAP = int(os.environ.get("IME_BUCKET_CAP", "2000") or 0)
+DECODE_CAND_CAP = int(os.environ.get("IME_DECODE_CAP", "600") or 0)
 
 # 模糊音（讯飞式容错输入）。开启后 z/zh、c/ch、s/sh、an/ang、en/eng、in/ing、n/l、f/h、r/l 互通。
 FUZZY = os.environ.get("IME_FUZZY", "1") not in ("0", "false", "False")

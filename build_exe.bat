@@ -1,23 +1,25 @@
 @echo off
 chcp 65001 >nul
 rem ============================================================
-rem  InputCH ä¸€é”®æ„å»º exeï¼ˆå«è®¯é£çº§å¼€æºè¯åº“ï¼Œç»Ÿä¸€ç½®äº githubMIT/ï¼‰
-rem  åŒå‡»æœ¬æ–‡ä»¶å³å¯ï¼šè£…ä¾èµ– -> ä¸‹è½½å¼€æºè¯åº“ -> PyInstaller æ‰“åŒ…
-rem  éœ€è”ç½‘ï¼ˆé¦–æ¬¡ä¸‹è½½è¯åº“ï¼‰ï¼›ä¹‹å exe å®Œå…¨ç¦»çº¿å¯ç”¨ã€‚
-rem  å¼€æºè¯åº“æ¥æºä¸ç½²åè§ githubMIT/LICENSE ä¸å„å­ç›®å½• READMEã€‚
+rem  InputCH Ò»¼ü¹¹½¨ exe£¨º¬Ñ¶·É¼¶¿ªÔ´´Ê¿â£¬Í³Ò»ÖÃÓÚ githubMIT/£©
+rem  Ë«»÷±¾ÎÄ¼ş¼´¿É£º×°ÒÀÀµ -> ÏÂÔØ¿ªÔ´´Ê¿â -> PyInstaller ´ò°ü
+rem  ĞèÁªÍø£¨Ê×´ÎÏÂÔØ´Ê¿â£©£»Ö®ºó exe ÍêÈ«ÀëÏß¿ÉÓÃ¡£
+rem  ¿ªÔ´´Ê¿âÀ´Ô´ÓëÊğÃû¼û githubMIT/LICENSE Óë¸÷×ÓÄ¿Â¼ README¡£
 rem ============================================================
 setlocal
 
 cd /d "%~dp0"
 
-echo [1/4] å®‰è£…ä¾èµ–ï¼ˆpypinyin å¯é€‰ï¼Œæå‡å¤šéŸ³å­—å‡†ç¡®åº¦ï¼‰...
+echo [1/4] °²×°ÒÀÀµ£¨pypinyin ¿ÉÑ¡£¬ÌáÉı¶àÒô×Ö×¼È·¶È£©...
 pip install pypinyin pyinstaller >nul 2>&1
 
-echo [2/4] ä¸‹è½½å¼€æºæ‹¼éŸ³è¯åº“ï¼ˆmozillazgï¼Œè½å…¥ githubMIT/ï¼‰...
+echo [2/4] ÏÂÔØ¿ªÔ´Æ´Òô´Ê¿â£¨mozillazg + RIME essay£¬ÂäÈë githubMIT/£©...
 if not exist githubMIT\pinyin-data mkdir githubMIT\pinyin-data
 if not exist githubMIT\phrase-pinyin-data mkdir githubMIT\phrase-pinyin-data
+if not exist githubMIT\rime-essay mkdir githubMIT\rime-essay
 set CHARS_URL=https://raw.githubusercontent.com/mozillazg/pinyin-data/master/kMandarin.txt
 set PHRASES_URL=https://raw.githubusercontent.com/mozillazg/phrase-pinyin-data/master/phrase.txt
+set ESSAY_URL=https://raw.githubusercontent.com/rime/rime-essay/master/essay.txt
 
 curl -fsSL -o githubMIT\pinyin-data\kMandarin.txt "%CHARS_URL%" 2>nul
 if errorlevel 1 (
@@ -27,16 +29,21 @@ curl -fsSL -o githubMIT\phrase-pinyin-data\phrase.txt "%PHRASES_URL%" 2>nul
 if errorlevel 1 (
   powershell -Command "Invoke-WebRequest -Uri '%PHRASES_URL%' -OutFile 'githubMIT\phrase-pinyin-data\phrase.txt'" 2>nul
 )
+curl -fsSL -o githubMIT\rime-essay\essay.txt "%ESSAY_URL%" 2>nul
+if errorlevel 1 (
+  powershell -Command "Invoke-WebRequest -Uri '%ESSAY_URL%' -OutFile 'githubMIT\rime-essay\essay.txt'" 2>nul
+)
 
-if exist githubMIT\pinyin-data\kMandarin.txt (echo   å•å­—åº“: githubMIT\pinyin-data\kMandarin.txt OK) else (echo   å•å­—åº“ä¸‹è½½å¤±è´¥ï¼ˆå°†ä»…ç”¨ THUOCL+å†…ç½®è¡¨ï¼‰)
-if exist githubMIT\phrase-pinyin-data\phrase.txt (echo   è¯ç»„åº“: githubMIT\phrase-pinyin-data\phrase.txt OK) else (echo   è¯ç»„åº“ä¸‹è½½å¤±è´¥ï¼ˆå°†ä»…ç”¨ THUOCL+å†…ç½®è¡¨ï¼‰)
+if exist githubMIT\pinyin-data\kMandarin.txt (echo   µ¥×Ö¿â: githubMIT\pinyin-data\kMandarin.txt OK) else (echo   µ¥×Ö¿âÏÂÔØÊ§°Ü£¨½«½öÓÃ THUOCL+ÄÚÖÃ±í£©)
+if exist githubMIT\phrase-pinyin-data\phrase.txt (echo   ´Ê×é¿â: githubMIT\phrase-pinyin-data\phrase.txt OK) else (echo   ´Ê×é¿âÏÂÔØÊ§°Ü£¨½«½öÓÃ THUOCL+ÄÚÖÃ±í£©)
+if exist githubMIT\rime-essay\essay.txt (echo   ´ÊÆµ×Ü±í: githubMIT\rime-essay\essay.txt OK£¨°ÙÍò¼¶£¬Google ¼¶´Ê¿â£©) else (echo   ´ÊÆµ×Ü±íÏÂÔØÊ§°Ü£¨½«½öÓÃ THUOCL+´Ê×é¿â£¬´ÊÁ¿½ÏĞ¡£©)
 
-echo [3/4] æ¸…ç†æ—§ç¼“å­˜ä¸æ—§æ„å»º...
+echo [3/4] ÇåÀí¾É»º´æÓë¾É¹¹½¨...
 if exist build rmdir /s /q build
 if exist dist rmdir /s /q dist
 if exist cache rmdir /s /q cache
 
-echo [4/4] PyInstaller æ‰“åŒ…ï¼ˆå•æ–‡ä»¶ / æ— æ§åˆ¶å°çª—å£ï¼‰...
+echo [4/4] PyInstaller ´ò°ü£¨µ¥ÎÄ¼ş / ÎŞ¿ØÖÆÌ¨´°¿Ú£©...
 pyinstaller --onefile --windowed --name "InputCH" ^
   --add-data "githubMIT;githubMIT" ^
   --add-data "logo.png;." ^
@@ -44,6 +51,6 @@ pyinstaller --onefile --windowed --name "InputCH" ^
   app.py
 
 echo.
-echo å®Œæˆã€‚exe ä½äº dist\InputCH.exe
-echo é¦–æ¬¡åŒå‡»ä¼šæ„å»ºè¯åº“ç´¢å¼•ï¼ˆå‡ åç§’ï¼‰ï¼Œä¹‹åç§’å¼€ã€‚
+echo Íê³É¡£exe Î»ÓÚ dist\InputCH.exe
+echo Ê×´ÎË«»÷»á¹¹½¨´Ê¿âË÷Òı£¨¼¸Ê®Ãë£©£¬Ö®ºóÃë¿ª¡£
 pause

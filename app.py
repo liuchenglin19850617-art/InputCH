@@ -1,4 +1,12 @@
 # -*- coding: utf-8 -*-
+"""
+InputCH · 中文拼音输入法（浮动候选条 + 全局键盘注入）
+
+外观：置顶浮动、无边框、蓝标题栏带 LOGO、拼音在上、候选横排带序号、可翻页、回车发送到当前窗口。
+B 方案：WH_KEYBOARD_LL 全局钩子拦截拼音，选中后 SendInput 把中文打进任意窗口（WS_EX_NOACTIVATE 不抢焦点）。
+无 Windows 钩子环境时自动退回本地模式（焦点输入 + 复制到剪贴板）。
+引擎复用 engine.py（THUOCL + 开源词库 + beam 解码 + 模糊音 + 简拼 + 可选 Deepseek）。
+"""
 import os
 import sys
 import queue

@@ -5,8 +5,9 @@
 词库来源（全部可选，缺了也能跑）：
   1) THUOCL 领域词库（githubMIT/THUOCL/THUOCL_*.txt，词\t词频）
   2) 内置 common_words.txt（补齐日常通用词，高优先级）
-  3) 开源单字拼音库 githubMIT/pinyin-data/kMandarin.txt —— 提供全量汉字拼音，使 THUOCL 全词可索引（无需 pypinyin）
+  3) 开源单字拼音库 githubMIT/pinyin-data/kMandarin.txt —— 提供全量汉字拼音，使全词可索引（无需 pypinyin）
   4) 开源词组拼音库 githubMIT/phrase-pinyin-data/phrase.txt —— 数十万通用词组（mozillazg phrase-pinyin-data）
+  5) RIME essay 词频总表 githubMIT/rime-essay/essay.txt —— 百万级中文词条（CC0，无拼音，用 kMandarin 注音），把词库量推到 Google 级
 
 能力：
   - decode(): 拼音串 -> top-k 候选。整句 beam search，词优先；支持模糊音(z/zh 等)与简拼(首字母)。
@@ -47,6 +48,7 @@ def _ext_path(name):
 _DICT_SOURCES = [
     ("pinyin-data/kMandarin.txt", "https://raw.githubusercontent.com/mozillazg/pinyin-data/master/kMandarin.txt"),
     ("phrase-pinyin-data/phrase.txt", "https://raw.githubusercontent.com/mozillazg/phrase-pinyin-data/master/phrase.txt"),
+    ("rime-essay/essay.txt", "https://raw.githubusercontent.com/rime/rime-essay/master/essay.txt"),
 ]
 
 
@@ -226,11 +228,61 @@ def _load_external_phrase_dict(path):
     return out
 
 
+def _load_essay(word_freq, path, cap=0):
+    """RIME essay.txt 格式：每行 `词条\t词频`（无拼音，按词频降序排列）。
+    仅收录「全汉字」词条（标点/拉丁/数字/假名等跳过），用 kMandarin 单字拼音表注音。
+    结果直接并入传入的 word_freq（调用方在注音表就绪后再为它们标注拼音）。
+    返回 (accepted, skipped)。cap>0 时按文件顺序（即词频降序）最多收录 cap 条。"""
+    accepted = 0
+    skipped = 0
+    try:
+        with open(path, encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                line = line.rstrip("\n")
+                if not line or line.startswith("#"):
+                    continue
+                toks = line.split("\t")
+                w = toks[0].strip()
+                if not w:
+                    continue
+                # 仅收录全汉字词条，避免把标点/英文/数字混进拼音索引
+                ok = True
+                for ch in w:
+                    if not ('\u4e00' <= ch <= '\u9fff'):
+                        ok = False
+                        break
+                if not ok:
+                    skipped += 1
+                    continue
+                try:
+                    freq = int(toks[1].strip()) if len(toks) > 1 else 1
+                except ValueError:
+                    freq = 1
+                word_freq[w] = word_freq.get(w, 0) + freq
+                accepted += 1
+                if cap and accepted >= cap:
+                    break
+    except FileNotFoundError:
+        pass
+    return accepted, skipped
+
+
+def _cap_phrase_buckets(index, cap):
+    """每个拼音键的同音词数量上限（性能护栏）。不影响拼音覆盖，只限制单音节同音词上限。"""
+    if not cap or cap <= 0:
+        return
+    for k in list(index.keys()):
+        d = index[k]
+        if len(d) > cap:
+            index[k] = dict(sorted(d.items(), key=lambda x: -x[1])[:cap])
+
+
 # ---------- 缓存 ----------
 def _dict_sig():
     has_chars = os.path.exists(_ext_path("pinyin-data/kMandarin.txt"))
     has_phrases = os.path.exists(_ext_path("phrase-pinyin-data/phrase.txt"))
-    return (config.CACHE_VERSION, HAS_PINYIN, has_chars, has_phrases)
+    has_essay = os.path.exists(_ext_path("rime-essay/essay.txt"))
+    return (config.CACHE_VERSION, HAS_PINYIN, has_chars, has_phrases, has_essay)
 
 
 def _load_cache():
@@ -353,33 +405,56 @@ def build(force=False):
                         if _w:
                             word_freq[_w] = word_freq.get(_w, 0) + 300000
 
-        # 3) 外部单字拼音库（全量汉字拼音，使 THUOCL 全词可索引）
+        # 2.5) RIME essay 百万级词频总表（无拼音，稍后用 kMandarin 注音；仅全汉字词条）
+        essay_accepted, essay_skipped = _load_essay(
+            word_freq, _ext_path("rime-essay/essay.txt"), config.ESSAY_CAP
+        )
+
+        # 3) 外部单字拼音库（全量汉字拼音，使全词可索引）
         n_chars_dict = _load_external_char_dict(_ext_path("pinyin-data/kMandarin.txt"))
 
         # 4) 外部词组拼音库（直接带拼音，跳过注音）
         ext_phrases = _load_external_phrase_dict(_ext_path("phrase-pinyin-data/phrase.txt"))
 
-        # 汉字拼音表：外部库 > pypinyin > 内置 fallback
-        def char2py(ch):
-            p = CHAR_PINYIN_EXT.get(ch)
-            if p:
-                return p
-            if HAS_PINYIN:
-                from pypinyin import pinyin as _pp, Style as _St
-                try:
-                    return _pp(ch, style=_St.NORMAL, heteronym=False)[0][0].lower().replace("ü", "v")
-                except Exception:
-                    pass
-            from pinyin_fallback import CHAR_PINYIN
-            return CHAR_PINYIN.get(ch, "")
-
-        # 为 THUOCL + common 批量注音
+        # 汉字拼音表：外部库(kMandarin) > 批量 pypinyin > 内置 fallback
+        # 先一次性取 kMandarin 覆盖的字，其余批量交给 pypinyin（仅一次调用，覆盖生僻字，避免逐字慢）。
         chars_set = set()
         for w in word_freq:
             for ch in w:
                 if '\u4e00' <= ch <= '\u9fff':
                     chars_set.add(ch)
-        cmap = {c: char2py(c) for c in chars_set}
+
+        cmap = {}
+        missing = []
+        for c in chars_set:
+            p = CHAR_PINYIN_EXT.get(c)
+            if p:
+                cmap[c] = p
+            else:
+                missing.append(c)
+
+        if missing and HAS_PINYIN:
+            try:
+                from pypinyin import pinyin as _pp, Style as _St
+                _res = _pp(missing, style=_St.NORMAL, heteronym=False)
+                for _ch, _r in zip(missing, _res):
+                    _py = (_r[0].lower().replace("ü", "v")) if _r and _r[0] else ""
+                    _py = _strip_tone(_py)
+                    if _py and _PURE.match(_py):
+                        cmap[_ch] = _py
+            except Exception:
+                pass
+
+        if missing:
+            try:
+                from pinyin_fallback import CHAR_PINYIN as _FB
+            except Exception:
+                _FB = {}
+            for c in missing:
+                if c not in cmap:
+                    _fb = _FB.get(c, "")
+                    if _fb:
+                        cmap[c] = _fb
 
         phrase_index = {}   # py -> {word: freq}
         char_index = {}     # py -> {char: freq}
@@ -390,6 +465,7 @@ def build(force=False):
         skipped = 0
 
         def add_phrase(w, freq):
+            """仅把词条按其拼音塞入短语索引；char_freq/bigram 等留到最终单遍重算。"""
             nonlocal total_freq, skipped
             py = _word_py(w, cmap)
             if py is None:
@@ -397,20 +473,6 @@ def build(force=False):
                 return
             d = phrase_index.setdefault(py, {})
             d[w] = d.get(w, 0) + freq
-            prev = None
-            for ch in w:
-                if '\u4e00' <= ch <= '\u9fff':
-                    cp = cmap.get(ch, "")
-                    if not cp:
-                        continue
-                    cd = char_index.setdefault(cp, {})
-                    cd[ch] = cd.get(ch, 0) + freq
-                    char_freq[ch] = char_freq.get(ch, 0) + freq
-                    char_occ[ch] = char_occ.get(ch, 0) + freq
-                    if prev is not None:
-                        key = prev + "\t" + ch
-                        bigram[key] = bigram.get(key, 0) + freq
-                    prev = ch
 
         for w, freq in word_freq.items():
             add_phrase(w, freq)
@@ -420,13 +482,26 @@ def build(force=False):
             for w, f in d.items():
                 pd = phrase_index.setdefault(py_key, {})
                 pd[w] = pd.get(w, 0) + f
+
+        # 每个拼音音节同音词护栏（不影响拼音覆盖，只限制单音节同音词上限）
+        _cap_phrase_buckets(phrase_index, config.PHRASE_BUCKET_CAP)
+
+        # 由最终短语索引单遍重算 char_freq / char_occ / bigram / char_index
+        # （保证这些派生表与「被护栏裁剪后的」短语索引一致，内存可控）
+        char_index = {}
+        char_freq = {}
+        char_occ = {}
+        bigram = {}
+        total_freq = 0
+        for py_key, d in phrase_index.items():
+            for w, f in d.items():
                 total_freq += f
                 prev = None
                 for ch in w:
                     if '\u4e00' <= ch <= '\u9fff':
                         cp = cmap.get(ch, "")
                         if not cp:
-                            cp = _char_pinyin_ext(ch) or (CHAR_PINYIN_EXT.get(ch, ""))
+                            cp = CHAR_PINYIN_EXT.get(ch, "")
                         if not cp:
                             continue
                         cd = char_index.setdefault(cp, {})
@@ -438,7 +513,6 @@ def build(force=False):
                             bigram[key] = bigram.get(key, 0) + f
                         prev = ch
 
-        total_freq = sum(sum(d.values()) for d in phrase_index.values())
         total_char_freq = sum(char_freq.values())
         vocab = len(char_freq)
 
@@ -458,6 +532,8 @@ def build(force=False):
             "indexed_chars": len(char_index),
             "skipped_words": skipped,
             "chars_dict": n_chars_dict,
+            "essay_accepted": essay_accepted,
+            "essay_skipped": essay_skipped,
             "has_pinyin": HAS_PINYIN,
             "total_freq": total_freq,
         }
@@ -553,6 +629,9 @@ def decode(pinyin_str, topk=None):
                 if lst:
                     combined.extend(lst.items())
             if combined:
+                if config.DECODE_CAND_CAP and len(combined) > config.DECODE_CAND_CAP:
+                    combined.sort(key=lambda x: -x[1])
+                    combined = combined[:config.DECODE_CAND_CAP]
                 words_at[(i, L)] = combined
 
     beam_width = config.BEAM_WIDTH
